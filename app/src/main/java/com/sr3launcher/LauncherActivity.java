@@ -18,6 +18,7 @@ import android.util.TypedValue;
 import android.view.Display;
 import android.view.Gravity;
 import android.view.View;
+import android.view.MotionEvent;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -43,30 +44,33 @@ import java.util.Locale;
 /** Лаунчер Saints Row: The Third: разрешение, графика, счётчик FPS. */
 public class LauncherActivity extends Activity {
     private static final String GAME = BuildConfig.GAME;
-    private static final boolean TR = "tr".equals(GAME), HM = "hm".equals(GAME), SR3 = !TR && !HM;
+    private static final boolean TR = "tr".equals(GAME), HM = "hm".equals(GAME), GL = "gl".equals(GAME), SR3 = !TR && !HM && !GL;
     private static final String PKG = TR ? "com.feralinteractive.tombraider_android"
-        : HM ? "com.feralinteractive.hitmanabsolution_android" : "com.feralinteractive.saintsrow3_android";
+        : HM ? "com.feralinteractive.hitmanabsolution_android" : GL ? "com.feralinteractive.gridlegends_android" : "com.feralinteractive.saintsrow3_android";
     private static final String GAME_ACTIVITY = PKG + ".MainActivity";
-    private static final String GAME_TITLE = TR ? "TOMB RAIDER" : HM ? "HITMAN: ABSOLUTION" : "SAINTS ROW: THE THIRD";
-    private static final String GAME_NAME = TR ? "Tomb Raider" : HM ? "Hitman: Absolution" : "Saints Row: The Third";
+    private static final String GAME_TITLE = TR ? "TOMB RAIDER" : HM ? "HITMAN: ABSOLUTION" : GL ? "GRID LEGENDS" : "SAINTS ROW: THE THIRD";
+    private static final String GAME_NAME = TR ? "Tomb Raider" : HM ? "Hitman: Absolution" : GL ? "GRID Legends" : "Saints Row: The Third";
     private static final String[] PRESET_BLOCKS = {"BatterySaverPreset", "PerformancePreset", "GraphicsPreset"};
     private static final String[] HMG = {"HKEY_CURRENT_USER", "Software", "IO Interactive", "Hitman Absolution"};
     private static final String[] SETUP = TR ? new String[] {"HKEY_CURRENT_USER", "Software", "Crystal Dynamics", "Tomb Raider", "Setup"}
         : HM ? new String[] {"HKEY_CURRENT_USER", "Software", "IO Interactive", "Hitman Absolution", "Setup"}
+        : GL ? new String[] {"HKEY_CURRENT_USER", "Software", "Feral Interactive", "GRIDLegends", "Setup"}
         : new String[] {"HKEY_CURRENT_USER", "Software", "Feral Interactive", "Saints Row The Third", "Setup"};
     private static final String[] TRG = join(SETUP, "GraphicsSettings");
+    private static final String[] GLG = {"HKEY_CURRENT_USER", "Software", "Feral Interactive", "GRIDLegends", "GraphicsSettings"};
+    private static final String[] GL_BLOCKS = {"BatterySaver", "Graphics", "Performance"};
     private static final String[] TRD = join(SETUP, "DynamicResolutionScaling");
     private static final String[] TR_BLOCKS = {"BatterySaverPreset", "GraphicsPreset", "PerformancePlusPreset", "PerformancePreset"};
     private static final String[] PROFILE_SUFFIX = {"", "_battery", "_framerate", "_graphics"};
     private static final String[] D3D_CONFIG = {"HKEY_CURRENT_USER", "Software", "IndirectX", "Direct3D", "Config"};
 
     // тема под игру: Saints Row фиолетовая, Tomb Raider тёмно-зелёная с янтарём, Hitman графитовая с красным
-    private static final int BG = TR ? 0xFF0A1514 : HM ? 0xFF0C0C0E : 0xFF120E1C;
-    private static final int CARD = TR ? 0xFF132529 : HM ? 0xFF19191D : 0xFF1D1730;
-    private static final int BTN2 = TR ? 0xFF1F3C41 : HM ? 0xFF2B2B31 : 0xFF2E2547;
-    private static final int ACCENT = TR ? 0xFFE8A33D : HM ? 0xFFDB2D2D : 0xFFB52FE0;
-    private static final int TEXT = TR ? 0xFFEAF2F0 : HM ? 0xFFF1F1F3 : 0xFFF2EEF8;
-    private static final int MUTED = TR ? 0xFF8FAAAB : HM ? 0xFF9A9AA4 : 0xFF9C93B3;
+    private static final int BG = TR ? 0xFF0A1514 : HM ? 0xFF0C0C0E : GL ? 0xFF0A1118 : 0xFF120E1C;
+    private static final int CARD = TR ? 0xFF132529 : HM ? 0xFF19191D : GL ? 0xFF121D29 : 0xFF1D1730;
+    private static final int BTN2 = TR ? 0xFF1F3C41 : HM ? 0xFF2B2B31 : GL ? 0xFF1E2F42 : 0xFF2E2547;
+    private static final int ACCENT = TR ? 0xFFE8A33D : HM ? 0xFFDB2D2D : GL ? 0xFFFF6A2B : 0xFFB52FE0;
+    private static final int TEXT = TR ? 0xFFEAF2F0 : HM ? 0xFFF1F1F3 : GL ? 0xFFEEF3F8 : 0xFFF2EEF8;
+    private static final int MUTED = TR ? 0xFF8FAAAB : HM ? 0xFF9A9AA4 : GL ? 0xFF8FA1B5 : 0xFF9C93B3;
 
     /** Описание одного выпадающего параметра графики. */
     private static final class Opt {
@@ -117,7 +121,8 @@ public class LauncherActivity extends Activity {
         final boolean presets;
         final int defIndex;
         boolean special, present;
-        int mode; // 0 обычный, 1 TR: верхний уровень и все пресеты, 2 TR: только пресеты, 3 HM: базовый ключ и профили
+        String loaded; // значение из файла при загрузке (нужно, чтобы не перезаписывать блоки с разными значениями)
+        int mode; // 5 GL: только блоки пресетов; 4 GL: базовый ключ и три блока пресетов (BatterySaver/Graphics/Performance); 0 обычный, 1 TR: верхний уровень и все пресеты, 2 TR: только пресеты, 3 HM: базовый ключ и профили
         Spinner spinner;
         List<String> vals = new ArrayList<String>();
 
@@ -247,6 +252,8 @@ public class LauncherActivity extends Activity {
     private Switch swCube, swHiRes, swDynRes;
     private Spinner fpsSpinner;
     private int[] fpsValues;
+    private boolean fpsForce; // пользователь трогал FPS в лаунчере
+    private int fpsLoaded = -1; // FPS из файла при открытии лаунчера (TR/HM): если пользователь его не менял, лимит игры не трогаем
     private TextView status;
     private Hw hw;
     private TextView hwText;
@@ -348,6 +355,19 @@ public class LauncherActivity extends Activity {
         open(i);
     }
 
+    /** Команда ADB, которая выдаёт лаунчеру доступ к Shizuku без окна запроса (Shizuku при этом должен быть запущен). */
+    private String adbGrantCmd() {
+        return "adb shell pm grant " + getPackageName() + " moe.shizuku.manager.permission.API_V23";
+    }
+
+    private void copyAdbCmd() {
+        try {
+            android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("adb", adbGrantCmd()));
+            say("Команда скопирована. Выполните её на компьютере с подключённым телефоном, затем нажмите «Запросить».");
+        } catch (Exception e) { say(adbGrantCmd()); }
+    }
+
     private void downloadShizuku() {
         try {
             startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("market://details?id=" + SHIZUKU_PKG)));
@@ -432,6 +452,9 @@ public class LauncherActivity extends Activity {
             setupRow("Доступ лаунчеру выдан",
                 running ? "Нажмите «Разрешить» в окне Shizuku. Если окна нет, включите лаунчер в списке приложений Shizuku" : "Сначала запустите Shizuku",
                 perm, running ? "Запросить" : null, new Act() { public void go() { Fs.requestAccess(); refreshSetup(); } });
+            if (!perm) setupRow("…или выдайте доступ по ADB",
+                "Команда выдаст доступ без окна: " + adbGrantCmd(),
+                false, "Скопировать", new Act() { public void go() { copyAdbCmd(); } });
         }
         setupRow("Игра установлена", "Установите " + GAME_NAME, gameInst, null, null);
         setupRow("Файл настроек игры создан",
@@ -462,8 +485,12 @@ public class LauncherActivity extends Activity {
     private void loadExtras(String xml) {
         for (Ex[] grp : exAll) for (Ex e : grp) {
             String cur = null;
-            if (xml != null) cur = PrefsEditor.getInKey(xml, e.key, e.mode == 2 ? join(TRG, "GraphicsPreset") : e.presets ? GP : e.path);
+            if (xml != null) {
+                if (e.mode == 5) { for (String blk : GL_BLOCKS) { cur = PrefsEditor.getInKey(xml, e.key, join(e.path, blk)); if (cur != null) break; } }
+                else cur = PrefsEditor.getInKey(xml, e.key, e.mode == 2 ? join(TRG, "GraphicsPreset") : e.presets ? GP : e.path);
+            }
             e.present = cur != null;
+            e.loaded = cur;
             e.vals.clear();
             List<String> labels = new ArrayList<String>();
             for (int i = 0; i < e.values.length; i++) { e.vals.add(e.values[i]); labels.add(e.labels[i]); }
@@ -495,6 +522,8 @@ public class LauncherActivity extends Activity {
             if (v == null) continue;
             // ключ, которого нет в файле, не создаём, пока значение не изменено
             if (!e.present && sameValue(e.values[e.defIndex], v, e.type)) continue;
+            // GL: диапазон кадра у пресетов разный (50/50, 70/85…): пишем только если пользователь сам изменил значение
+            if (e.mode == 5 && e.loaded != null && sameValue(e.loaded, v, e.type)) continue;
             if (e.mode == 1) {
                 xml = PrefsEditor.setInKey(xml, e.key, e.type, v, e.path);
                 for (String blk : TR_BLOCKS) {
@@ -505,6 +534,16 @@ public class LauncherActivity extends Activity {
                 for (String blk : TR_BLOCKS) {
                     String[] bp = join(TRG, blk);
                     if (PrefsEditor.getInKey(xml, e.key, bp) != null) xml = PrefsEditor.setInKey(xml, e.key, e.type, v, bp);
+                }
+            } else if (e.mode == 4 || e.mode == 5) {
+                if (e.mode == 4) xml = PrefsEditor.setInKey(xml, e.key, e.type, v, e.path);
+                for (String blk : GL_BLOCKS) {
+                    String[] bp = join(e.path, blk);
+                    String cur = PrefsEditor.getInKey(xml, e.key, bp);
+                    if (cur == null) continue;
+                    int c = cur.indexOf(',');
+                    if (c >= 0) xml = PrefsEditor.setInKey(xml, e.key, "string", v + cur.substring(c), bp); // «значение, 0, 0»: меняем только первое
+                    else xml = PrefsEditor.setInKey(xml, e.key, e.type, v, bp);
                 }
             } else if (e.mode == 3) {
                 xml = PrefsEditor.setInKey(xml, e.key, e.type, v, e.path);
@@ -650,6 +689,7 @@ public class LauncherActivity extends Activity {
         fpsRow.addView(fn, new LinearLayout.LayoutParams(0, -2, 1f));
         fpsSpinner = new Spinner(this);
         fillSpinner(fpsSpinner, fpsLabels, 2);
+        fpsSpinner.setOnTouchListener(new View.OnTouchListener() { @Override public boolean onTouch(View v, MotionEvent ev) { fpsForce = true; return false; } });
         fpsRow.addView(fpsSpinner, new LinearLayout.LayoutParams(dp(150), -2));
         LinearLayout.LayoutParams frp = new LinearLayout.LayoutParams(-1, -2);
         frp.bottomMargin = dp(10);
@@ -712,7 +752,7 @@ public class LauncherActivity extends Activity {
         android.widget.ImageView logo = new android.widget.ImageView(this);
         logo.setImageResource(R.drawable.logo);
         logo.setAdjustViewBounds(true);
-        LinearLayout.LayoutParams lgp = new LinearLayout.LayoutParams(dp(46), dp(46));
+        LinearLayout.LayoutParams lgp = new LinearLayout.LayoutParams(GL ? dp(80) : dp(46), dp(46));
         lgp.rightMargin = dp(14);
         head.addView(logo, lgp);
         LinearLayout titles = new LinearLayout(this);
@@ -736,6 +776,23 @@ public class LauncherActivity extends Activity {
         credit.addView(gh);
         head.addView(credit, new LinearLayout.LayoutParams(-2, -2));
         root.addView(head, new LinearLayout.LayoutParams(-1, -2));
+
+        // баннер о переезде на единый лаунчер
+        LinearLayout mv = new LinearLayout(this);
+        mv.setOrientation(LinearLayout.HORIZONTAL);
+        mv.setGravity(Gravity.CENTER_VERTICAL);
+        mv.setPadding(dp(24), dp(8), dp(24), dp(8));
+        mv.setBackgroundColor(ACCENT);
+        TextView mvText = text("Лаунчер переехал: Saints Row, Tomb Raider, Hitman и GRID Legends теперь в одном приложении — Feral Лаунчер. Этот лаунчер больше не обновляется.", 13, Color.WHITE, true);
+        mv.addView(mvText, new LinearLayout.LayoutParams(0, -2, 1f));
+        Button mvBtn = button("Скачать Feral Лаунчер", false);
+        mvBtn.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) {
+            startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/Tsifrokayf/feral-launcher/releases/latest")));
+        } });
+        LinearLayout.LayoutParams mvp = new LinearLayout.LayoutParams(-2, -2);
+        mvp.leftMargin = dp(16);
+        mv.addView(mvBtn, mvp);
+        root.addView(mv, new LinearLayout.LayoutParams(-1, -2));
         View accentLine = new View(this);
         accentLine.setBackgroundColor(ACCENT);
         root.addView(accentLine, new LinearLayout.LayoutParams(-1, dp(2)));
@@ -1213,13 +1270,15 @@ public class LauncherActivity extends Activity {
             + "2. Настройки → О телефоне → «Номер сборки», нажмите 7 раз (режим разработчика).\n"
             + "3. Для разработчиков → включите «Беспроводная отладка» (нужен Wi‑Fi).\n"
             + "4. В Shizuku: «Запуск через беспроводную отладку» → «Сопряжение», введите код из настроек, затем «Запустить».\n"
-            + "5. Вернитесь в лаунчер и нажмите «Разрешить» в окне Shizuku.\n\n"
+            + "5. Вернитесь в лаунчер и нажмите «Разрешить» в окне Shizuku.\n"
+            + "   Вместо окна можно выдать доступ с компьютера: " + adbGrantCmd() + "\n\n"
             + "Без root Shizuku придётся запускать заново после перезагрузки телефона.";
+        final boolean shHere = pkgInstalled(SHIZUKU_PKG);
         new AlertDialog.Builder(this)
             .setTitle("Нет доступа к файлам игры")
             .setMessage(guide)
-            .setPositiveButton("Скачать Shizuku", new android.content.DialogInterface.OnClickListener() {
-                public void onClick(android.content.DialogInterface d, int w) { downloadShizuku(); }
+            .setPositiveButton(shHere ? "Открыть Shizuku" : "Скачать Shizuku", new android.content.DialogInterface.OnClickListener() {
+                public void onClick(android.content.DialogInterface d, int w) { if (shHere) openShizuku(); else downloadShizuku(); }
             })
             .setNeutralButton("Проверить root", new android.content.DialogInterface.OnClickListener() {
                 public void onClick(android.content.DialogInterface d, int w) { Fs.retryRoot(); refreshSetup(); }
@@ -1534,7 +1593,7 @@ public class LauncherActivity extends Activity {
                 ex("SSAOMode", "Затенение углов (SSAO)", "", TRG, 1, "integer", 1, "0|Выкл.", "1|1 (по умолч.)", "2|2", "3|3"),
                 ex("DOFQuality", "Глубина резкости", "", TRG, 1, "integer", 1, "0|Выкл.", "1|1 (по умолч.)", "2|2", "3|3"),
                 ex("LODScale", "Детализация вдали (LOD)", "Больше: модели упрощаются позже", TRG, 1, "integer", 2, "0|0 (мин.)", "1|1", "2|2 (по умолч.)", "3|3 (макс.)"),
-                ex("TextureQuality", "Качество текстур", "Авто: игра выбирает по видеопамяти", TRG, 1, "integer", 0, "-1|Авто (по умолч.)", "0|0 (мин.)", "1|1", "2|2", "3|3"),
+                ex("TextureQuality", "Качество текстур", "Чем МЕНЬШЕ число, тем чётче текстуры (проверено в игре: 3 — самые мыльные). Авто: игра выбирает по видеопамяти", TRG, 1, "integer", 0, "-1|Авто (по умолч.)", "0|0 (макс. чёткость)", "1|1", "2|2", "3|3 (мин., мыльные)"),
                 ex("BestTextureFilter", "Фильтрация текстур", "Больше: чётче текстуры под углом", TRG, 1, "integer", 3, "0|0", "2|2", "4|4", "6|6 (по умолч.)"),
                 ex("ReflectionQuality", "Отражения", "", TRG, 1, "integer", 0, "0|0 (по умолч.)", "1|1", "2|2"),
                 ex("HairQuality", "Волосы (TressFX)", "Волосы Лары, тяжело для GPU", TRG, 1, "integer", 0, "0|0 (по умолч.)", "1|1"),
@@ -1591,31 +1650,30 @@ public class LauncherActivity extends Activity {
             };
             exAll = new Ex[][] {oGfx, oDrs, oEngine, oCtl, oMisc, oSys};
             oPresets = new String[][] {
-                {"res=540", "dyn=1", "ShadowMode=0", "ShadowResolution=0", "SSAOMode=0", "DOFQuality=0", "LODScale=0", "TextureQuality=0", "BestTextureFilter=2",
+                {"res=540", "dyn=1", "ShadowMode=0", "ShadowResolution=0", "SSAOMode=0", "DOFQuality=0", "LODScale=0", "TextureQuality=3", "BestTextureFilter=2",
                     "ReflectionQuality=0", "HairQuality=0", "AntiAliasingMode=1", "EnableTessellation=0", "EnablePostProcess=0", "EnableMotionBlur=0"},
-                {"res=720", "dyn=1", "ShadowMode=1", "ShadowResolution=0", "SSAOMode=0", "DOFQuality=0", "LODScale=1", "TextureQuality=0", "BestTextureFilter=4",
+                {"res=720", "dyn=1", "ShadowMode=1", "ShadowResolution=0", "SSAOMode=0", "DOFQuality=0", "LODScale=1", "TextureQuality=3", "BestTextureFilter=4",
                     "ReflectionQuality=0", "HairQuality=0", "AntiAliasingMode=1", "EnableTessellation=0", "EnablePostProcess=1", "EnableMotionBlur=0"},
                 {"res=900", "dyn=1", "ShadowMode=1", "ShadowResolution=1", "SSAOMode=1", "DOFQuality=1", "LODScale=2", "TextureQuality=-1", "BestTextureFilter=6",
                     "ReflectionQuality=0", "HairQuality=0", "AntiAliasingMode=1", "EnableTessellation=0", "EnablePostProcess=1", "EnableMotionBlur=0"},
-                {"res=0", "dyn=0", "ShadowMode=2", "ShadowResolution=2", "SSAOMode=2", "DOFQuality=2", "LODScale=3", "TextureQuality=2", "BestTextureFilter=6",
+                {"res=0", "dyn=0", "ShadowMode=2", "ShadowResolution=2", "SSAOMode=2", "DOFQuality=2", "LODScale=3", "TextureQuality=1", "BestTextureFilter=6",
                     "ReflectionQuality=1", "HairQuality=1", "AntiAliasingMode=2", "EnableTessellation=0", "EnablePostProcess=1", "EnableMotionBlur=0"},
-                {"res=0", "dyn=0", "ShadowMode=2", "ShadowResolution=3", "SSAOMode=3", "DOFQuality=3", "LODScale=3", "TextureQuality=3", "BestTextureFilter=6",
+                {"res=0", "dyn=0", "ShadowMode=2", "ShadowResolution=3", "SSAOMode=3", "DOFQuality=3", "LODScale=3", "TextureQuality=0", "BestTextureFilter=6",
                     "ReflectionQuality=2", "HairQuality=1", "AntiAliasingMode=3", "EnableTessellation=1", "EnablePostProcess=1", "EnableMotionBlur=0"},
             };
-        } else {
+        } else if (HM) {
             oGfx = new Ex[] {
                 sw("Bloom", "Свечение (Bloom)", "", HMG, 3, 1),
                 ex("Bokeh", "Боке", "Размытие фона бликами", HMG, 3, "integer", 2, "0|Выкл.", "1|1", "2|2"),
                 sw("FXAA", "Сглаживание FXAA", "", HMG, 3, 1),
-                ex("MSAA", "Сглаживание MSAA", "Тяжело для GPU", HMG, 3, "integer", 0, "0|Выкл.", "2|2x", "4|4x"),
-                ex("LevelOfDetail", "Детализация вдали (LOD)", "", HMG, 3, "integer", 3, "0|0 (мин.)", "1|1", "2|2", "3|3 (макс.)"),
+                                ex("LevelOfDetail", "Детализация вдали (LOD)", "", HMG, 3, "integer", 3, "0|0 (мин.)", "1|1", "2|2", "3|3 (макс.)"),
                 ex("ShadowQuality", "Тени", "", HMG, 3, "integer", 3, "0|0 (мин.)", "1|1", "2|2", "3|3", "4|4 (макс.)"),
-                ex("SSAO", "Затенение углов (SSAO)", "", HMG, 3, "integer", 0, "0|Выкл.", "1|1", "2|2", "3|3"),
+                ex("SSAO", "Затенение углов (SSAO)", "Игра принимает значения до 2: больше она сама сбрасывает при старте", HMG, 3, "integer", 0, "0|Выкл.", "1|1", "2|2 (макс.)"),
                 sw("LPV", "Глобальное освещение (LPV)", "Тяжело для GPU", HMG, 3, 0),
                 ex("MirrorQuality", "Зеркала и отражения", "", HMG, 3, "integer", 3, "0|0 (мин.)", "1|1", "2|2", "3|3 (макс.)"),
                 sw("Tessellation", "Тесселяция", "", HMG, 3, 0),
                 ex("TextureFilter", "Фильтрация текстур", "", HMG, 3, "integer", 3, "0|0 (мин.)", "1|1", "2|2", "3|3 (макс.)"),
-                ex("TextureResolution", "Разрешение текстур", "Больше: больше видеопамяти", HMG, 3, "integer", 1, "0|0 (низкое)", "1|1", "2|2 (высокое)"),
+                ex("TextureResolution", "Разрешение текстур", "Игра принимает значения 0 и 1: большее она сама сбрасывает при старте", HMG, 3, "integer", 1, "0|0 (низкое)", "1|1 (макс.)"),
                 ex("ResolutionScalingMultiplier", "Масштаб рендера", "Внутренний масштаб разрешения, ниже: быстрее", SETUP, 3, "double", 5, pct),
             };
             oFrame = new Ex[] {
@@ -1646,7 +1704,7 @@ public class LauncherActivity extends Activity {
                 sw("DisableAllClothesPhysics", "Отключить физику одежды", "Даёт прирост FPS на слабом железе", SETUP, 0, 0),
                 sw("DisableClothWindPhysics", "Отключить ветер на одежде", "", SETUP, 0, 0),
                 sw("DisableShadows", "Отключить тени полностью", "Резко повышает FPS, картинка плоская", SETUP, 0, 0),
-                sw("SkipLegalMovies", "Пропускать заставки при запуске", "", HMG, 0, 1),
+                sw("SkipLegalMovies", "Флаг «пропускать заставки»", "Ставит флаг игры, но логотипы Feral и Glacier2 эта версия всё равно показывает (проверено); их можно пропустить касанием экрана", HMG, 0, 1),
                 sw("AutoSkipCutscenes", "Пропускать ролики", "", SETUP, 0, 0),
                 sw("AutoSkipSequences", "Пропускать вставки", "", SETUP, 0, 0),
                 sw("AutoDropBodyWhenEnteringCover", "Бросать тело при входе в укрытие", "", SETUP, 0, 1),
@@ -1675,9 +1733,79 @@ public class LauncherActivity extends Activity {
                 {"res=1080", "dyn=1", "Bloom=1", "Bokeh=1", "FXAA=1", "MSAA=0", "LevelOfDetail=2", "ShadowQuality=2", "SSAO=1", "LPV=0", "MirrorQuality=2",
                     "Tessellation=0", "TextureFilter=2", "TextureResolution=1", "ResolutionScalingMultiplier=1.000000"},
                 {"res=0", "dyn=1", "Bloom=1", "Bokeh=2", "FXAA=1", "MSAA=0", "LevelOfDetail=3", "ShadowQuality=3", "SSAO=2", "LPV=1", "MirrorQuality=3",
-                    "Tessellation=0", "TextureFilter=3", "TextureResolution=2", "ResolutionScalingMultiplier=1.000000"},
-                {"res=0", "dyn=0", "Bloom=1", "Bokeh=2", "FXAA=1", "MSAA=2", "LevelOfDetail=3", "ShadowQuality=4", "SSAO=3", "LPV=1", "MirrorQuality=3",
-                    "Tessellation=1", "TextureFilter=3", "TextureResolution=2", "ResolutionScalingMultiplier=1.000000"},
+                    "Tessellation=0", "TextureFilter=3", "TextureResolution=1", "ResolutionScalingMultiplier=1.000000"},
+                {"res=0", "dyn=0", "Bloom=1", "Bokeh=2", "FXAA=1", "MSAA=0", "LevelOfDetail=3", "ShadowQuality=4", "SSAO=2", "LPV=1", "MirrorQuality=3",
+                    "Tessellation=1", "TextureFilter=3", "TextureResolution=1", "ResolutionScalingMultiplier=1.000000"},
+            };
+        } else {
+            // GRID Legends: значения лежат плоско в GraphicsSettings; пределы взяты из того, во что игра урезает слишком большие значения при старте
+            String[] n03 = {"0|0 (мин.)", "1|1", "2|2", "3|3 (макс.)"};
+            oGfx = new Ex[] {
+                ex("TextureQuality", "Качество текстур", "", GLG, 4, "integer", 0, n03),
+                ex("Shadows", "Тени", "", GLG, 4, "integer", 0, n03),
+                ex("LightingQuality", "Освещение", "", GLG, 4, "integer", 0, "0|0 (мин.)", "1|1 (макс.)"),
+                ex("AmbientOcclusion", "Затенение углов (AO)", "", GLG, 4, "integer", 0, n03),
+                ex("ScreenSpaceReflections", "Отражения в экране (SSR)", "", GLG, 4, "integer", 0, "0|0 (мин.)", "1|1", "2|2 (макс.)"),
+                ex("VehicleReflections", "Отражения на машинах", "", GLG, 4, "integer", 0, "0|0 (мин.)", "1|1", "2|2", "3|3", "4|4 (макс.)"),
+                ex("Mirrors", "Зеркала", "", GLG, 4, "integer", 0, n03),
+                ex("LODQuality", "Детализация вдали (LOD)", "", GLG, 4, "integer", 1, "0|0 (мин.)", "1|1", "2|2 (макс.)"),
+                ex("Crowds", "Зрители", "", GLG, 4, "integer", 1, n03),
+                ex("GroundCover", "Трава и кусты", "", GLG, 4, "integer", 2, n03),
+                ex("Particles", "Частицы", "", GLG, 4, "integer", 0, n03),
+                ex("WeatherEffects", "Погодные эффекты", "", GLG, 4, "integer", 1, n03),
+                ex("VolumetricLights", "Объёмный свет", "Тяжело для GPU", GLG, 4, "integer", 0, "0|Выкл.", "1|1", "2|2 (макс.)"),
+                ex("SmokeShadows", "Тени от дыма", "", GLG, 4, "integer", 0, "0|Выкл.", "1|1", "2|2 (макс.)"),
+                ex("Skidmarks", "Следы шин", "", GLG, 4, "integer", 1, "0|0 (мин.)", "1|1", "2|2 (макс.)"),
+                ex("PostProcess", "Постобработка", "", GLG, 4, "integer", 1, "0|0 (мин.)", "1|1", "2|2 (макс.)"),
+                ex("AntiAliasing", "Сглаживание", "0 выкл.; значения 1–3 взяты из файла настроек", GLG, 4, "integer", 2, "0|Выкл.", "1|1", "2|2", "3|3"),
+                sw("MotionBlur", "Размытие движения", "", GLG, 0, 0),
+                sw("HDR", "HDR", "", GLG, 0, 0),
+                sw("ReduceVisibleRain", "Меньше видимого дождя", "", GLG, 0, 0),
+                sw("FireworksAndConfetti", "Фейерверки и конфетти", "", GLG, 0, 1),
+                sw("VerticalSync", "Вертикальная синхронизация", "Включена: FPS не выше частоты экрана", GLG, 0, 0),
+            };
+            // динамическое разрешение: диапазон масштаба кадра лежит в блоках пресетов, включение (DynamicResolution) — в основном ключе
+            oDrs = new Ex[] {
+                ex("FrameSizeMinimumPercentage", "Мин. размер кадра, %", "Ниже этого динамическое разрешение не опускается", GLG, 5, "integer", 2, "40|40", "50|50", "60|60", "70|70", "80|80", "90|90", "100|100"),
+                ex("FrameSizeMaximumPercentage", "Макс. размер кадра, %", "Выше этого не поднимается", GLG, 5, "integer", 4, "50|50", "60|60", "70|70", "80|80", "90|90", "100|100"),
+                ex("OptimisationResolutionMultiplier", "Множитель разрешения пресета, %", "Дополнительный множитель внутри пресетов игры", GLG, 5, "integer", 5, "50|50", "60|60", "70|70", "80|80", "90|90", "100|100"),
+            };
+            oFrame = new Ex[0];
+            oEngine = new Ex[] {
+                sw("EnableFramerateManager", "Менеджер частоты кадров", "Игра сама меняет FPS между отзывчивым и простаивающим режимом", D3D_CONFIG, 0, 1),
+                sw("VulkanUseSeparateSubmitThread", "Отдельный поток отправки (Vulkan)", "Разгружает главный поток", D3D_CONFIG, 0, 1),
+                sw("VulkanEnableSubmitBatching", "Пакетная отправка (Vulkan)", "", D3D_CONFIG, 0, 1),
+                sw("AsyncCompute", "Асинхронные вычисления", "ОПАСНО: может подвесить игру на заставке. Лучше не включать", SETUP, 0, 0),
+                sw("ForceCrowdFrameSkip", "Пропуск кадров анимации зрителей", "Меньше нагрузка на CPU", SETUP, 0, 1),
+                sw("UseFeralTAA", "TAA от Feral", "Своё временное сглаживание вместо стандартного", SETUP, 0, 0),
+                sw("UseFeralUpscaler", "Апскейлер от Feral", "", SETUP, 0, 0),
+            };
+            oMisc = new Ex[] {
+                sw("AllowHD", "Разрешить HD-текстуры", "Нужен установленный пакет HD-текстур", join(SETUP, "TexturePacks"), 0, 1),
+                sw("UseHD", "Использовать HD-текстуры", "Больше видеопамяти", join(SETUP, "TexturePacks"), 0, 1),
+                ex("MaxParticleEmittersOverride", "Лимит источников частиц", "Меньше: больше FPS в толпе машин", SETUP, 0, "integer", 2, "1024|1024", "2048|2048", "4096|4096 (по умолч.)", "8192|8192"),
+            };
+            oCtl = new Ex[0];
+            oSys = new Ex[] {
+                sw("RenderUnderNotch", "Рисовать под вырезом экрана", "", SETUP, 0, 1),
+                sw("AllowAutorotate", "Автоповорот", "", SETUP, 0, 1),
+                sw("AllowPausing", "Пауза по кнопке", "", SETUP, 0, 1),
+                sw("PauseOnSuspend", "Пауза при сворачивании", "", SETUP, 0, 1),
+                sw("AllowSendCrashReports", "Отправлять отчёты о сбоях", "", SETUP, 0, 0),
+                sw("AllowSendUsageData", "Отправлять данные об использовании", "", SETUP, 0, 0),
+            };
+            exAll = new Ex[][] {oGfx, oDrs, oEngine, oMisc, oSys};
+            oPresets = new String[][] {
+                {"res=540", "dyn=1", "TextureQuality=0", "Shadows=0", "LightingQuality=0", "AmbientOcclusion=0", "ScreenSpaceReflections=0", "VehicleReflections=0", "Mirrors=0",
+                    "LODQuality=0", "Crowds=0", "GroundCover=0", "Particles=0", "WeatherEffects=0", "VolumetricLights=0", "SmokeShadows=0", "PostProcess=0", "AntiAliasing=1", "MotionBlur=0"},
+                {"res=720", "dyn=1", "TextureQuality=1", "Shadows=1", "LightingQuality=0", "AmbientOcclusion=0", "ScreenSpaceReflections=0", "VehicleReflections=1", "Mirrors=0",
+                    "LODQuality=1", "Crowds=1", "GroundCover=1", "Particles=1", "WeatherEffects=1", "VolumetricLights=0", "SmokeShadows=0", "PostProcess=1", "AntiAliasing=2", "MotionBlur=0"},
+                {"res=900", "dyn=1", "TextureQuality=2", "Shadows=2", "LightingQuality=1", "AmbientOcclusion=1", "ScreenSpaceReflections=1", "VehicleReflections=2", "Mirrors=1",
+                    "LODQuality=1", "Crowds=2", "GroundCover=2", "Particles=2", "WeatherEffects=2", "VolumetricLights=0", "SmokeShadows=1", "PostProcess=1", "AntiAliasing=2", "MotionBlur=0"},
+                {"res=0", "dyn=1", "TextureQuality=3", "Shadows=3", "LightingQuality=1", "AmbientOcclusion=2", "ScreenSpaceReflections=1", "VehicleReflections=3", "Mirrors=2",
+                    "LODQuality=2", "Crowds=3", "GroundCover=3", "Particles=3", "WeatherEffects=3", "VolumetricLights=1", "SmokeShadows=1", "PostProcess=2", "AntiAliasing=3", "MotionBlur=0"},
+                {"res=0", "dyn=0", "TextureQuality=3", "Shadows=3", "LightingQuality=1", "AmbientOcclusion=3", "ScreenSpaceReflections=2", "VehicleReflections=4", "Mirrors=3",
+                    "LODQuality=2", "Crowds=3", "GroundCover=3", "Particles=3", "WeatherEffects=3", "VolumetricLights=2", "SmokeShadows=2", "PostProcess=2", "AntiAliasing=3", "MotionBlur=1"},
             };
         }
     }
@@ -1717,6 +1845,15 @@ public class LauncherActivity extends Activity {
                 withExtra(oPresets[0], "fps=30", "MinScaling=0.600000", "MaxScaling=0.800000"),
             };
         }
+        if (GL) {
+            // класс GPU 0 флагман .. 3 слабый; пресеты 0..4: Минимум, Низкие, Средние, Высокие, Ультра
+            oAuto60 = new String[][] {
+                withExtra(oPresets[3], "fps=60"), withExtra(oPresets[2], "fps=60"), withExtra(oPresets[1], "fps=60"), withExtra(oPresets[0], "fps=60"),
+            };
+            oAuto30 = new String[][] {
+                withExtra(oPresets[4], "fps=30"), withExtra(oPresets[3], "fps=30"), withExtra(oPresets[2], "fps=30"), withExtra(oPresets[1], "fps=30"),
+            };
+        }
         if (HM) {
             oAuto60 = new String[][] {
                 hmAuto(1080, 2, 3, 3, 3, 60, "0.600000", "0.800000"),
@@ -1752,6 +1889,7 @@ public class LauncherActivity extends Activity {
             int want = Integer.parseInt(val), fi = 0;
             for (int r = 0; r < fpsValues.length; r++) if (fpsValues[r] <= want) fi = r;
             fpsSpinner.setSelection(fi);
+            fpsForce = true;
         } else if (key.equals("dyn")) swDynRes.setChecked("1".equals(val));
         else setExValue(key, val);
     }
@@ -1856,16 +1994,21 @@ public class LauncherActivity extends Activity {
         }
         resGroup.check(sel == resHeights.length - 1 && sel >= baseRes ? 110 : 100 + sel);
         String[] drs = TR ? TRD : join(SETUP, "DynamicResolutionScaling");
-        swDynRes.setChecked("1".equals(PrefsEditor.getInKey(xml, "Enable", drs)));
+        if (GL) {
+            String dl = PrefsEditor.getInKey(xml, "DynamicResolution", GLG);
+            swDynRes.setChecked(dl != null && !"0".equals(dl));
+        } else swDynRes.setChecked("1".equals(PrefsEditor.getInKey(xml, "Enable", drs)));
 
         int fps = 60;
         try {
-            fps = (int) Math.round(Double.parseDouble(TR ? PrefsEditor.getInKey(xml, "MaxFramesPerSecond", D3D_CONFIG)
+            fps = (int) Math.round(Double.parseDouble(GL ? PrefsEditor.getInKey(xml, "FramerateLimit", GLG)
+                : TR ? PrefsEditor.getInKey(xml, "MaxFramesPerSecond", D3D_CONFIG)
                 : PrefsEditor.getInKey(xml, "ResponsiveFPS", SETUP)));
         } catch (Exception ignored) { }
         int fi = 0;
         for (int i = 0; i < fpsValues.length; i++) if (fpsValues[i] <= fps) fi = i;
         fpsSpinner.setSelection(fi);
+        fpsLoaded = fpsValues[fi];
         boolean show = "1".equals(PrefsEditor.getInKey(xml, "ShowFeralGUI", D3D_CONFIG));
         boolean compact = "1".equals(PrefsEditor.getInKey(xml, "CompactFeralGUI", D3D_CONFIG));
         hudGroup.check(!show ? 200 : (compact ? 201 : 202));
@@ -1908,43 +2051,63 @@ public class LauncherActivity extends Activity {
                 if (sfx.length() > 0 && PrefsEditor.getInKey(xml, "ResolutionHeight" + sfx, SETUP) != null)
                     xml = PrefsEditor.setInKey(xml, "ResolutionHeight" + sfx, "integer", String.valueOf(h), SETUP);
             }
+            // MSAA игра не поддерживает: при старте сама сбрасывает в 0 (проверено), поэтому держим 0 и FXAA как есть
+            for (String sfx : PROFILE_SUFFIX) {
+                if (PrefsEditor.getInKey(xml, "MSAA" + sfx, HMG) != null) xml = PrefsEditor.setInKey(xml, "MSAA" + sfx, "integer", "0", HMG);
+            }
         }
 
         int fps = fpsValues[Math.max(0, fpsSpinner.getSelectedItemPosition())];
         boolean dyn = swDynRes.isChecked();
-        String minS = "1.000000", maxS = "1.000000";
-        if (dyn) {
-            minS = exValue(oMin); maxS = exValue(oMax);
-            if (minS == null) minS = "0.600000";
-            if (maxS == null) maxS = "0.800000";
-            try { if (Double.parseDouble(minS) > Double.parseDouble(maxS)) minS = maxS; } catch (Exception ignored) { }
-        }
-        String[] drs = TR ? TRD : join(SETUP, "DynamicResolutionScaling");
-        xml = PrefsEditor.setInKey(xml, "Enable", "integer", dyn ? "1" : "0", drs);
-        xml = PrefsEditor.setInKey(xml, "MinScaling", "double", minS, drs);
-        xml = PrefsEditor.setInKey(xml, "MaxScaling", "double", maxS, drs);
-        xml = PrefsEditor.setInKey(xml, "FPSTarget", "double", PrefsEditor.fmt(fps), drs);
-        if (TR) {
-            for (String blk : TR_BLOCKS) {
-                String[] bp = join(TRG, blk);
-                if (PrefsEditor.getInKey(xml, "DRSMinScaling", bp) != null) xml = PrefsEditor.setInKey(xml, "DRSMinScaling", "double", minS, bp);
-                if (PrefsEditor.getInKey(xml, "DRSMaxScaling", bp) != null) xml = PrefsEditor.setInKey(xml, "DRSMaxScaling", "double", maxS, bp);
-                if (PrefsEditor.getInKey(xml, "MaxFramesPerSecond", bp) != null) xml = PrefsEditor.setInKey(xml, "MaxFramesPerSecond", "integer", String.valueOf(fps), bp);
+        if (GL) {
+            // динамическое разрешение и лимит FPS лежат в GraphicsSettings (основной ключ) и дублируются в блоках пресетов
+            int lvl = 0;
+            try { lvl = Integer.parseInt(PrefsEditor.getInKey(xml, "DynamicResolution", GLG)); } catch (Exception ignored) { }
+            xml = PrefsEditor.setInKey(xml, "DynamicResolution", "integer", dyn ? String.valueOf(lvl > 0 ? lvl : 1) : "0", GLG);
+            if (fpsForce || fpsLoaded < 0 || fps != fpsLoaded) {
+                xml = PrefsEditor.setInKey(xml, "FramerateLimit", "integer", String.valueOf(fps), GLG);
+                for (String blk : GL_BLOCKS) {
+                    String[] bp = join(GLG, blk);
+                    if (PrefsEditor.getInKey(xml, "FramerateLimit", bp) != null) xml = PrefsEditor.setInKey(xml, "FramerateLimit", "integer", String.valueOf(fps), bp);
+                }
             }
-            xml = PrefsEditor.setInKey(xml, "MaxFramesPerSecond", "integer", String.valueOf(fps), D3D_CONFIG);
         } else {
-            for (String sfx : PROFILE_SUFFIX) {
-                if (sfx.length() == 0) continue;
-                if (PrefsEditor.getInKey(xml, "Enable" + sfx, drs) != null) xml = PrefsEditor.setInKey(xml, "Enable" + sfx, "integer", dyn ? "1" : "0", drs);
-                if (PrefsEditor.getInKey(xml, "MinScaling" + sfx, drs) != null) xml = PrefsEditor.setInKey(xml, "MinScaling" + sfx, "double", minS, drs);
-                if (PrefsEditor.getInKey(xml, "MaxScaling" + sfx, drs) != null) xml = PrefsEditor.setInKey(xml, "MaxScaling" + sfx, "double", maxS, drs);
-                if (PrefsEditor.getInKey(xml, "FPSTarget" + sfx, drs) != null) xml = PrefsEditor.setInKey(xml, "FPSTarget" + sfx, "integer", String.valueOf(fps), drs);
-                if (PrefsEditor.getInKey(xml, "ResponsiveFPS" + sfx, SETUP) != null) xml = PrefsEditor.setInKey(xml, "ResponsiveFPS" + sfx, "integer", String.valueOf(fps), SETUP);
+            String minS = "1.000000", maxS = "1.000000";
+            if (dyn) {
+                minS = exValue(oMin); maxS = exValue(oMax);
+                if (minS == null) minS = "0.600000";
+                if (maxS == null) maxS = "0.800000";
+                try { if (Double.parseDouble(minS) > Double.parseDouble(maxS)) minS = maxS; } catch (Exception ignored) { }
             }
-            xml = PrefsEditor.setInKey(xml, "ResponsiveFPS", "integer", String.valueOf(fps), SETUP);
-            xml = PrefsEditor.setInKey(xml, "FrameRateLimit", "integer", String.valueOf(fps), SETUP);
-        }
+            String[] drs = TR ? TRD : join(SETUP, "DynamicResolutionScaling");
+            xml = PrefsEditor.setInKey(xml, "Enable", "integer", dyn ? "1" : "0", drs);
+            xml = PrefsEditor.setInKey(xml, "MinScaling", "double", minS, drs);
+            xml = PrefsEditor.setInKey(xml, "MaxScaling", "double", maxS, drs);
+            // лимит FPS трогаем, только если его меняли в лаунчере: иначе затирается значение, выставленное в самой игре
+            boolean fpsChanged = fpsForce || fpsLoaded < 0 || fps != fpsLoaded;
+            if (fpsChanged) xml = PrefsEditor.setInKey(xml, "FPSTarget", "double", PrefsEditor.fmt(fps), drs);
+            if (TR) {
+                for (String blk : TR_BLOCKS) {
+                    String[] bp = join(TRG, blk);
+                    if (PrefsEditor.getInKey(xml, "DRSMinScaling", bp) != null) xml = PrefsEditor.setInKey(xml, "DRSMinScaling", "double", minS, bp);
+                    if (PrefsEditor.getInKey(xml, "DRSMaxScaling", bp) != null) xml = PrefsEditor.setInKey(xml, "DRSMaxScaling", "double", maxS, bp);
+                    if (fpsChanged && PrefsEditor.getInKey(xml, "MaxFramesPerSecond", bp) != null) xml = PrefsEditor.setInKey(xml, "MaxFramesPerSecond", "integer", String.valueOf(fps), bp);
+                }
+                if (fpsChanged) xml = PrefsEditor.setInKey(xml, "MaxFramesPerSecond", "integer", String.valueOf(fps), D3D_CONFIG);
+            } else {
+                for (String sfx : PROFILE_SUFFIX) {
+                    if (sfx.length() == 0) continue;
+                    if (PrefsEditor.getInKey(xml, "Enable" + sfx, drs) != null) xml = PrefsEditor.setInKey(xml, "Enable" + sfx, "integer", dyn ? "1" : "0", drs);
+                    if (PrefsEditor.getInKey(xml, "MinScaling" + sfx, drs) != null) xml = PrefsEditor.setInKey(xml, "MinScaling" + sfx, "double", minS, drs);
+                    if (PrefsEditor.getInKey(xml, "MaxScaling" + sfx, drs) != null) xml = PrefsEditor.setInKey(xml, "MaxScaling" + sfx, "double", maxS, drs);
+                    if (PrefsEditor.getInKey(xml, "FPSTarget" + sfx, drs) != null) xml = PrefsEditor.setInKey(xml, "FPSTarget" + sfx, "integer", String.valueOf(fps), drs);
+                    if (PrefsEditor.getInKey(xml, "ResponsiveFPS" + sfx, SETUP) != null) xml = PrefsEditor.setInKey(xml, "ResponsiveFPS" + sfx, "integer", String.valueOf(fps), SETUP);
+                }
+                xml = PrefsEditor.setInKey(xml, "ResponsiveFPS", "integer", String.valueOf(fps), SETUP);
+                xml = PrefsEditor.setInKey(xml, "FrameRateLimit", "integer", String.valueOf(fps), SETUP);
+            }
 
+        }
         xml = applyExtras(xml);
 
         if (TR) {

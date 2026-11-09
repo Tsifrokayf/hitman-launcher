@@ -1,3 +1,5 @@
+> **⚠️ Лаунчер переехал.** Все четыре игры (Saints Row: The Third, Tomb Raider, Hitman: Absolution, GRID Legends) теперь в одном приложении — **[Feral Лаунчер](https://github.com/Tsifrokayf/feral-launcher/releases/latest)**. Этот репозиторий больше не развивается.
+
 <p align="center">
   <img src="docs/logo.png" width="96" alt="Hitman Launcher logo">
 </p>
